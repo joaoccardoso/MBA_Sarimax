@@ -1,8 +1,13 @@
 import os
 from pathlib import Path
+from typing import Literal
 
+from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import StandardScaler
+
+YEARS = ["2015", "2016", "2017", "2018", "2019", "2020", "2021", "2022", "2023", "2024"]
 
 COLUMNS = {
     "Data": "Data",
@@ -18,10 +23,82 @@ COLUMNS = {
 }
 
 
-def export_dataset(df: pd.DataFrame, filename: Path):
-    output_name = Path(os.path.splitext(filename)[0] + "_TRATADO.CSV")
+def normalize_dataset(df: pd.DataFrame):
+    features = list(df.columns)
+    scaler = StandardScaler()
+    norm_df = df.copy()
+    norm_df[features] = scaler.fit_transform(df[features])
+
+    return norm_df
+
+
+def export_fill_gaps_candidates_figures(
+    df: pd.DataFrame,
+    dataset_folder: Path,
+    fill_option: Literal["df_ffill", "df_spline", "df_linear", "df_mean"],
+    export_images=True,
+):
+    fill_gaps_candidates = {
+        "df_ffill": df.ffill(),
+        "df_spline": df.interpolate(method="spline", order=1),
+        "df_linear": df.interpolate(method="linear"),
+        "df_mean": df.fillna(df.mean()),
+    }
+
+    if export_images:
+        output_folder = dataset_folder / "fill_gaps_options"
+        os.makedirs(output_folder, exist_ok=True)
+
+        features = list(df.columns)
+
+        for method, result_df in fill_gaps_candidates.items():
+            fig, axes = plt.subplots(
+                len(features), 2, figsize=(16, 3 * len(features) + 1)
+            )
+            for i, feature in enumerate(features):
+                # Original data
+                axes[i, 0].plot(
+                    df.index, df[feature], label="Original", color="red", alpha=0.7
+                )
+                axes[i, 0].set_title(
+                    f"{feature.capitalize()} - Original (com dados faltantes)"
+                )
+                axes[i, 0].grid()
+                axes[i, 0].legend()
+
+                # Filled data
+                axes[i, 1].plot(
+                    result_df.index,
+                    result_df[feature],
+                    label=f"Preenchido ({method})",
+                    color="blue",
+                    alpha=0.7,
+                )
+                axes[i, 1].set_title(
+                    f"{feature.capitalize()} - Preenchendo Dados({method})"
+                )
+                axes[i, 1].grid()
+                axes[i, 1].legend()
+
+            fig.tight_layout()
+            fig.savefig(output_folder / f"{method}.png")
+
+    output_df = fill_gaps_candidates[fill_option]
+    return output_df
+
+
+def resample_dataset(df: pd.DataFrame):
+    output_df = df.copy()
+    output_df["DATA"] = pd.to_datetime(df["DATA"])
+    output_df = output_df.set_index("DATA").resample("D").mean()
+
+    return output_df
+
+
+def export_dataset(df: pd.DataFrame, filename: Path, suffix: str, index: bool):
+    output_name = Path(os.path.splitext(filename)[0] + f"_{suffix}.CSV")
     print("Exporting to", output_name)
-    df.to_csv(output_name, index=False)
+    df.to_csv(output_name, index=index)
 
 
 def transform_dataset(old_df: pd.DataFrame):
@@ -53,25 +130,49 @@ def read_dataset(filename: Path):
     return dados
 
 
-years = ["2015", "2016", "2017", "2018", "2019", "2020", "2021", "2022", "2023", "2024"]
+def main():
+    for year in YEARS:
+        dataset_folder = Path("data", year)
+        filename = (
+            dataset_folder
+            / f"INMET_SE_RJ_A610_PICO DO COUTO_01-01-{year}_A_31-12-{year}.CSV"
+        )
 
-for year in years:
-    filename = Path(
-        "data",
-        year,
-        f"INMET_SE_RJ_A610_PICO DO COUTO_01-01-{year}_A_31-12-{year}.CSV",
-    )
+        if not filename.exists():
+            print("File not found:", filename)
+            continue
 
-    if not filename.exists():
-        print("File not found:", filename)
-        continue
+        print("Reading data at", filename)
+        df = read_dataset(filename)
 
-    print("Reading data at", filename)
-    df = read_dataset(filename)
+        print("Transforming dataset")
+        df = transform_dataset(df)
 
-    print("Transforming dataset")
-    df = transform_dataset(df)
+        print("Resampling dataset to daily frequency")
+        resampled_df = resample_dataset(df)
 
-    export_dataset(df, filename)
+        print("Filling dataset gaps and exporting candidates")
+        filled_df = export_fill_gaps_candidates_figures(
+            resampled_df, dataset_folder, "df_ffill", export_images=False
+        )
 
-print("Done")
+        print("Normalizing with z-score")
+        norm_df = normalize_dataset(filled_df)
+
+        export_dataset(
+            df,
+            filename,
+            suffix="TRATADO",
+            index=False,
+        )
+        export_dataset(filled_df, filename, suffix="TRATADO_MENSAL", index=True)
+        export_dataset(
+            filled_df.describe(), filename, suffix="DESCRITIVA_MENSAL", index=True
+        )
+        export_dataset(norm_df, filename, suffix="NORMALIZADO_MENSAL", index=True)
+
+    print("Done")
+
+
+if __name__ == "__main__":
+    main()
