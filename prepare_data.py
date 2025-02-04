@@ -35,11 +35,11 @@ def normalize_dataset(df: pd.DataFrame):
 def export_fill_gaps_candidates_figures(
     df: pd.DataFrame,
     dataset_folder: Path,
-    fill_option: Literal["df_fbfill", "df_spline", "df_linear", "df_mean"],
+    fill_option: Literal["df_ffill", "df_spline", "df_linear", "df_mean"],
     export_images=True,
 ):
     fill_gaps_candidates = {
-        "df_fbfill": df.ffill().bfill(),
+        "df_ffill": df.ffill(),
         "df_spline": df.interpolate(method="spline", order=1),
         "df_linear": df.interpolate(method="linear"),
         "df_mean": df.fillna(df.mean()),
@@ -95,10 +95,16 @@ def resample_dataset(df: pd.DataFrame):
     return output_df
 
 
-def export_dataset(df: pd.DataFrame, filename: Path, suffix: str, index: bool):
-    output_name = Path(os.path.splitext(filename)[0] + f"_{suffix}.CSV")
-    print("Exporting to", output_name)
-    df.to_csv(output_name, index=index)
+def export_dataset(
+    df: pd.DataFrame,
+    filename: Path,
+    suffix: str | None = None,
+    index: bool = False,
+):
+    output_filename = (f"_{suffix}" if suffix else "") + ".CSV"
+    output_path = Path(os.path.splitext(filename)[0] + output_filename)
+    print("Exporting to", output_path)
+    df.to_csv(output_path, index=index)
 
 
 def transform_dataset(old_df: pd.DataFrame):
@@ -130,49 +136,48 @@ def read_dataset(filename: Path):
     return dados
 
 
+def prepare_year_dataset(year: str, export: bool):
+    dataset_folder = Path("data", year)
+    filename = (
+        dataset_folder
+        / f"INMET_SE_RJ_A610_PICO DO COUTO_01-01-{year}_A_31-12-{year}.CSV"
+    )
+
+    if not filename.exists():
+        print("File not found:", filename)
+        return None
+
+    print("Reading data at", filename)
+    df = read_dataset(filename)
+
+    print("Transforming dataset")
+    df = transform_dataset(df)
+
+    print("Resampling dataset to daily frequency")
+    resampled_df = resample_dataset(df)
+
+    export_dataset(resampled_df, filename, suffix="TRATADO_MENSAL", index=True)
+    export_dataset(
+        resampled_df.describe(), filename, suffix="DESCRITIVA_MENSAL", index=True
+    )
+
+    return resampled_df
+
+
 def main():
-    for year in YEARS:
-        dataset_folder = Path("data", year)
-        filename = (
-            dataset_folder
-            / f"INMET_SE_RJ_A610_PICO DO COUTO_01-01-{year}_A_31-12-{year}.CSV"
-        )
+    df = pd.concat([prepare_year_dataset(year, export=False) for year in YEARS])
+    filled_df = export_fill_gaps_candidates_figures(
+        df,
+        Path("data"),
+        "df_ffill",
+        export_images=True,
+    )
 
-        if not filename.exists():
-            print("File not found:", filename)
-            continue
+    norm_df = normalize_dataset(filled_df)
 
-        print("Reading data at", filename)
-        df = read_dataset(filename)
-
-        print("Transforming dataset")
-        df = transform_dataset(df)
-
-        print("Resampling dataset to daily frequency")
-        resampled_df = resample_dataset(df)
-
-        print("Filling dataset gaps and exporting candidates")
-        filled_df = export_fill_gaps_candidates_figures(
-            resampled_df,
-            dataset_folder,
-            "df_fbfill",
-            export_images=True,
-        )
-
-        print("Normalizing with z-score")
-        norm_df = normalize_dataset(filled_df)
-
-        export_dataset(
-            df,
-            filename,
-            suffix="TRATADO",
-            index=False,
-        )
-        export_dataset(filled_df, filename, suffix="TRATADO_MENSAL", index=True)
-        export_dataset(
-            filled_df.describe(), filename, suffix="DESCRITIVA_MENSAL", index=True
-        )
-        export_dataset(norm_df, filename, suffix="NORMALIZADO_MENSAL", index=True)
+    export_dataset(df, "data/concat_data_2015_2024.CSV", index=True)
+    export_dataset(filled_df, "data/concat_data_2015_2024.CSV", "filled", index=True)
+    export_dataset(norm_df, "data/concat_data_2015_2024.CSV", "normalized", index=True)
 
     print("Done")
 
