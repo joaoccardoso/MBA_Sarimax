@@ -35,11 +35,11 @@ def normalize_dataset(df: pd.DataFrame):
 def export_fill_gaps_candidates_figures(
     df: pd.DataFrame,
     dataset_folder: Path,
-    fill_option: Literal["df_ffill", "df_spline", "df_linear", "df_mean"],
+    fill_option: Literal["df_fbfill", "df_spline", "df_linear", "df_mean"],
     export_images=True,
 ):
     fill_gaps_candidates = {
-        "df_ffill": df.ffill(),
+        "df_fbfill": df.ffill().bfill(),
         "df_spline": df.interpolate(method="spline", order=1),
         "df_linear": df.interpolate(method="linear"),
         "df_mean": df.fillna(df.mean()),
@@ -153,7 +153,10 @@ def main():
 
         print("Filling dataset gaps and exporting candidates")
         filled_df = export_fill_gaps_candidates_figures(
-            resampled_df, dataset_folder, "df_ffill", export_images=False
+            resampled_df,
+            dataset_folder,
+            "df_fbfill",
+            export_images=True,
         )
 
         print("Normalizing with z-score")
