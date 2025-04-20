@@ -137,10 +137,9 @@ def read_dataset(filename: Path):
 
 
 def prepare_year_dataset(year: str, export: bool):
-    dataset_folder = Path("data", year)
+    folder = Path("data", year)
     filename = (
-        dataset_folder
-        / f"INMET_SE_RJ_A610_PICO DO COUTO_01-01-{year}_A_31-12-{year}.CSV"
+        folder / f"INMET_SE_RJ_A610_PICO DO COUTO_01-01-{year}_A_31-12-{year}.CSV"
     )
 
     if not filename.exists():
