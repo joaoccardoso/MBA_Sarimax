@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Define the years you want to process
+mkdir "data"
+
 years=("2015" "2016" "2017" "2018" "2019" "2020" "2021" "2022" "2023" "2024") 
 
-# Define the base URL (adjust this to your actual source)
-base_url="https://portal.inmet.gov.br/uploads/dadoshistoricos"  # Replace with actual URL
+base_url="https://portal.inmet.gov.br/uploads/dadoshistoricos"
 
 for year in "${years[@]}"; do
     echo "Processing year: $year"
@@ -17,10 +17,10 @@ for year in "${years[@]}"; do
     wget "$url"
     
     # Create a directory for the year if it doesn't exist
-    mkdir -p "$year"
+    mkdir -p "data/$year"
     
     # Unzip and extract only the files containing "PICO DO COUTO"
-    unzip -j $zip_file "*PICO DO COUTO*" -d $year
+    unzip -j $zip_file "**/*PICO DO COUTO*" "*PICO DO COUTO*" -d "data/$year"
 
     # Delete zip file
     rm $zip_file
